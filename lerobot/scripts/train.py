@@ -48,6 +48,7 @@ from lerobot.common.utils.utils import (
     has_method,
     init_logging,
 )
+from lerobot.common.utils.image_utils import resize_with_pad_train
 from lerobot.common.utils.wandb_utils import WandBLogger
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
@@ -134,6 +135,11 @@ def train(cfg: TrainPipelineConfig):
     dataset.meta.info['features']['action']['names'] = ['left_arm_exp_1', 'left_arm_exp_2', 'left_arm_exp_3', 'left_arm_exp_4', 'left_arm_exp_5', 'left_arm_exp_6', 
                                                     'right_arm_exp_1', 'right_arm_exp_2', 'right_arm_exp_3', 'right_arm_exp_4', 'right_arm_exp_5', 'right_arm_exp_6', 'vacuum_exp']
     
+    dataset.meta.info['features']['observation.images.front']['shape'] = (3, 224, 224)
+    dataset.meta.info['features']['observation.images.wrist_right']['shape'] = (3, 224, 224)
+    
+    del dataset.meta.info['features']['observation.images.depth']
+    
     for key, episode_stats in dataset.meta.episodes_stats.items():
                 for feature in ['observation.state', 'action']:
                     for sub_feature in ['min', 'max', 'mean', 'std']:
@@ -142,9 +148,7 @@ def train(cfg: TrainPipelineConfig):
     for feature in ['min', 'max', 'mean', 'std']:
         dataset.meta.stats['observation.state'][feature] = np.delete(dataset.meta.stats['observation.state'][feature], [6,13], axis=0)
         dataset.meta.stats['action'][feature] = np.delete(dataset.meta.stats['action'][feature], [6,13], axis=0)
-    
-    
-    
+   
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
@@ -222,10 +226,6 @@ def train(cfg: TrainPipelineConfig):
         start_time = time.perf_counter()
         batch = next(dl_iter)
         train_tracker.dataloading_s = time.perf_counter() - start_time
-
-        for key in batch:
-            if isinstance(batch[key], torch.Tensor):
-                batch[key] = batch[key].to(device, non_blocking=True)
         
         # remove unused depth info
         if 'observation.images.depth' in batch:
@@ -242,13 +242,14 @@ def train(cfg: TrainPipelineConfig):
             keep_cols = [i for i in range(15) if i not in {6, 13}]
             batch["action"] = batch["action"][..., keep_cols]
         
-        # the front camera resolution is 640x360, pad it to 640x480 which is the resolution of the wrist camera
-        batch['observation.images.front'] = torch.nn.functional.pad(
-            batch['observation.images.front'], 
-            pad=(0, 0, 60, 60),  # 左右不填充，上下各填充60
-            mode='constant', 
-            value=0  # black
-        )
+        for obs_key in batch:
+            if 'images' in obs_key:
+                batch[obs_key] = resize_with_pad_train(batch[obs_key], 224, 224)
+        
+        for key in batch:
+            if isinstance(batch[key], torch.Tensor):
+                batch[key] = batch[key].to(device, non_blocking=True)
+        
         
         train_tracker, output_dict = update_policy(
             train_tracker,
