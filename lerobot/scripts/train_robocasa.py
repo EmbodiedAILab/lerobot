@@ -128,26 +128,9 @@ def train(cfg: TrainPipelineConfig):
 
     logging.info("Creating dataset")
     dataset = make_dataset(cfg)
-    dataset.meta.info['features']['observation.state']['shape'] = (13,)
-    dataset.meta.info['features']['observation.state']['names'] = ['left_arm_1', 'left_arm_2', 'left_arm_3', 'left_arm_4', 'left_arm_5', 'left_arm_6', 
-                                                               'right_arm_1', 'right_arm_2', 'right_arm_3', 'right_arm_4', 'right_arm_5', 'right_arm_6', 'vacuum']
-    dataset.meta.info['features']['action']['shape'] = (13,)
-    dataset.meta.info['features']['action']['names'] = ['left_arm_exp_1', 'left_arm_exp_2', 'left_arm_exp_3', 'left_arm_exp_4', 'left_arm_exp_5', 'left_arm_exp_6', 
-                                                    'right_arm_exp_1', 'right_arm_exp_2', 'right_arm_exp_3', 'right_arm_exp_4', 'right_arm_exp_5', 'right_arm_exp_6', 'vacuum_exp']
-    
-    dataset.meta.info['features']['observation.images.front']['shape'] = (3, 224, 224)
-    dataset.meta.info['features']['observation.images.wrist_right']['shape'] = (3, 224, 224)
-    
-    del dataset.meta.info['features']['observation.images.depth']
-    
-    for key, episode_stats in dataset.meta.episodes_stats.items():
-                for feature in ['observation.state', 'action']:
-                    for sub_feature in ['min', 'max', 'mean', 'std']:
-                        episode_stats[feature][sub_feature] = np.delete(episode_stats[feature][sub_feature], [6,13], axis=0)
-                        dataset.meta.episodes_stats[key] = episode_stats
-    for feature in ['min', 'max', 'mean', 'std']:
-        dataset.meta.stats['observation.state'][feature] = np.delete(dataset.meta.stats['observation.state'][feature], [6,13], axis=0)
-        dataset.meta.stats['action'][feature] = np.delete(dataset.meta.stats['action'][feature], [6,13], axis=0)
+    for feature in dataset.meta.info['features']:
+        if "images" in feature:
+            dataset.meta.info['features'][feature]['shape'] = (3, 224, 224)
    
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
@@ -227,29 +210,15 @@ def train(cfg: TrainPipelineConfig):
         batch = next(dl_iter)
         train_tracker.dataloading_s = time.perf_counter() - start_time
         
-        # remove unused depth info
-        if 'observation.images.depth' in batch:
-            del batch['observation.images.depth']
-            
-        # remove redundant joint states
-        if batch["observation.state"].shape[-1] == 15:
-            keep_cols = [i for i in range(15) if i not in {6, 13}]
-            # 切片操作删除指定列
-            batch["observation.state"] = batch["observation.state"][..., keep_cols]
-        
-        # remove redundant joint states
-        if batch["action"].shape[-1] == 15:
-            keep_cols = [i for i in range(15) if i not in {6, 13}]
-            batch["action"] = batch["action"][..., keep_cols]
-        
         for obs_key in batch:
             if 'images' in obs_key:
+                if 'is_pad' in obs_key:
+                    continue
                 batch[obs_key] = resize_with_pad_train(batch[obs_key], 224, 224)
         
         for key in batch:
             if isinstance(batch[key], torch.Tensor):
                 batch[key] = batch[key].to(device, non_blocking=True)
-        
         
         train_tracker, output_dict = update_policy(
             train_tracker,

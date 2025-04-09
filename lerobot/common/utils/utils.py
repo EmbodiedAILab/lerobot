@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-if hasattr(torch, 'npu'):
+if os.environ['ASCEND_HOME_PATH'] is not None:
     import torch_npu
     logging.info("exists npu, import torch_npu")
 
