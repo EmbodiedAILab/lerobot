@@ -50,10 +50,6 @@ class WebsocketPolicyServer:
             img = torch.from_numpy(img)
             img = einops.rearrange(img, "h w c -> c h w").contiguous()
             c, h, w = img.shape
-            if h == 360:
-                img = torch.nn.functional.pad(img,pad=(0, 0, 60, 60), mode='constant', value=0)
-            c, h, w = img.shape
-
             assert c < h and c < w, f"expect channel last images, but instead got {img.shape=}"
             assert img.dtype == torch.uint8, f"expect torch.uint8, but instead {img.dtype=}"
             img = img.unsqueeze(0)
