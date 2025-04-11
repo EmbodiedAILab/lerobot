@@ -23,6 +23,7 @@ from pathlib import Path
 from pprint import pformat
 from types import SimpleNamespace
 from typing import Any
+import copy
 
 import datasets
 import jsonlines
@@ -240,7 +241,7 @@ def load_episodes_stats(local_dir: Path) -> dict:
 def backward_compatible_episodes_stats(
     stats: dict[str, dict[str, np.ndarray]], episodes: list[int]
 ) -> dict[str, dict[str, np.ndarray]]:
-    return {ep_idx: stats for ep_idx in episodes}
+    return {ep_idx: copy.deepcopy(stats) for ep_idx in episodes}
 
 
 def load_image_as_numpy(
