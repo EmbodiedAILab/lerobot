@@ -151,10 +151,27 @@ class DiffusionPolicy(PreTrainedPolicy):
         Resuse the `select_action` method in order to reuse the open source lerobot, but its performance may
         decrease a bit.
         """
-        first_action = self.select_action(batch)        
-        result_tensor = torch.cat([first_action] + list(self._action_queue), dim=0)
-        self._action_queue = deque([], maxlen=self.config.n_action_steps)
-        return result_tensor
+        batch = self.normalize_inputs(batch)
+        if self.config.image_features:
+            batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
+            batch["observation.images"] = torch.stack(
+                [batch[key] for key in self.config.image_features], dim=-4
+            )
+        # Note: It's important that this happens after stacking the images into a single key.
+        self._queues = populate_queues(self._queues, batch)
+
+        # if len(self._queues["action"]) == 0:
+        # stack n latest observations from the queue
+        batch = {k: torch.stack(list(self._queues[k]), dim=1) for k in batch if k in self._queues}
+        actions = self.diffusion.generate_actions(batch)
+
+        # TODO(rcadene): make above methods return output dictionary?
+        actions = self.unnormalize_outputs({"action": actions})["action"]
+        return actions
+        # self._queues["action"].extend(actions.transpose(0, 1))
+
+        # action = self._queues["action"].popleft()
+        # return action
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, None]:
         """Run the batch through the model and compute the loss for training or validation."""
