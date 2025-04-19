@@ -107,31 +107,38 @@ def is_torch_device_available(try_device: str) -> bool:
 
 
 def is_amp_available(device: str):
-    if device in ["cuda", "cpu"]:
+    if device in ["cuda", "cpu", "npu"]:
         return True
     elif device == "mps":
         return False
     else:
         raise ValueError(f"Unknown device '{device}.")
 
-
-def init_logging():
-    def custom_format(record):
+class CustomFormatter(logging.Formatter):
+    def format(self, record):
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         fnameline = f"{record.pathname}:{record.lineno}"
+        # 保留原始消息格式，处理可能的参数
+        if record.args:
+            record.msg = record.msg % record.args
+            record.args = None
         message = f"{record.levelname} {dt} {fnameline[-15:]:>15} {record.msg}"
+        # 处理异常信息
+        if record.exc_info:
+            message += "\n" + self.formatException(record.exc_info)
         return message
 
-    logging.basicConfig(level=logging.INFO)
+def init_logging():
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
 
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
 
-    formatter = logging.Formatter()
-    formatter.format = custom_format
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(console_handler)
+    console_handler.setFormatter(CustomFormatter())
+    root_logger.addHandler(console_handler)
+
 
 
 def format_big_number(num, precision=0):
