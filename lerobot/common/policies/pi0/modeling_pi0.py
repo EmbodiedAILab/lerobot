@@ -259,6 +259,10 @@ class PI0Policy(PreTrainedPolicy):
 
     def get_optim_params(self) -> dict:
         return self.parameters()
+    
+    @torch.no_grad
+    def select_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+        raise NotImplementedError("")
 
     @torch.no_grad
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
