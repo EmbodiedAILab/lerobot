@@ -7,11 +7,11 @@ import websockets.sync.client
 import lerobot.common.utils.msgpack_utils as msgpack_utils
 
 input = {
-    "state": np.ones((13,)),
+    "state": np.ones((17,)),
     "images": {
         # input images from client has spec h w c (client)
-        "front": np.random.randint(256, size=(480, 640, 3), dtype=np.uint8),
-        "wrist_right": np.random.randint(256, size=(480, 640, 3), dtype=np.uint8),
+        "front": np.random.randint(256, size=(360, 640, 3), dtype=np.uint8),
+        "wrist_right": np.random.randint(256, size=(360, 640, 3), dtype=np.uint8),
     },
     "prompt": "do something",
 }
@@ -28,16 +28,17 @@ while True:
     except ConnectionRefusedError:
         logging.info("Still waiting for server...")
         time.sleep(5)
-        
-data = packer.pack(input)
-conn.send(data)
-response = conn.recv()
-if isinstance(response, str):
-    # we're expecting bytes; if the server sends a string, it's an error.
-    print(f"Error in inference server:\n{response}")
-    exit()
 
-infer_result = msgpack_utils.unpackb(response)
-print(infer_result['actions'].shape, infer_result)
-assert len(infer_result['actions'][0]) == len(input['state'])
+for i in range(100):
+    data = packer.pack(input)
+    conn.send(data)
+    response = conn.recv()
+    if isinstance(response, str):
+        # we're expecting bytes; if the server sends a string, it's an error.
+        print(f"Error in inference server:\n{response}")
+        exit()
+
+    infer_result = msgpack_utils.unpackb(response)
+    print(infer_result['actions'].shape, infer_result)
+    assert len(infer_result['actions'][0]) == len(input['state'])
 

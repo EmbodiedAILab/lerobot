@@ -2,7 +2,9 @@ import asyncio
 import logging
 import traceback
 import einops
+import time
 
+import wandb
 import numpy as np
 import torch
 import websockets.asyncio.server
@@ -27,7 +29,13 @@ class WebsocketPolicyServer:
         self._policy = policy
         self._host = host
         self._port = port
-        self._metadata = metadata or {}        
+        self._metadata = metadata or {}  
+        if self._metadata['wandb_enable']:
+            self._wandb_enable = True
+            self._drop_first_n_frames = self._metadata['drop_first_n_frames']
+            self._infer_cnt = 0
+        else:
+            self._wandb_enable = False
 
     def serve_forever(self) -> None:
         asyncio.run(self.run())
@@ -57,7 +65,7 @@ class WebsocketPolicyServer:
             img /= 255
             
             imgkey = f"observation.images.{imgkey}"
-            print('add a key: ', imgkey, img.shape)
+            # print('add a key: ', imgkey, img.shape)
             return_observations[imgkey] = img
             
         return_observations["observation.state"] = torch.from_numpy(observations["state"]).float()
@@ -89,13 +97,26 @@ class WebsocketPolicyServer:
                 obs = await self.preprocess_observation(obs)
                 for key in obs:
                     if isinstance(obs[key], torch.Tensor):
-                        obs[key] = obs[key].to("cuda", non_blocking=True)
-                        
+                        obs[key] = obs[key].to(self._policy.config.device, non_blocking=True)
+                
+                if self._wandb_enable:
+                    start_time = time.perf_counter()
+                
                 with torch.inference_mode():
                     action = self._policy.select_action_chunk(obs)
-                    action = action.squeeze(0)
-                    print("inference once with action:", action.shape, action)
-                    res = {"actions": action.cpu().numpy()}
+                
+                if self._wandb_enable:
+                    if self._infer_cnt < self._drop_first_n_frames:
+                        self._infer_cnt = self._infer_cnt + 1
+                    else:
+                        infer_cost_ms = (time.perf_counter() - start_time) * 1000
+                        log_dict = {
+                            "infer_cost_ms": infer_cost_ms
+                        }  
+                        wandb.log(log_dict)
+                action = action.squeeze(0)
+                # print("inference once with action:", action.shape, action)
+                res = {"actions": action.cpu().numpy()}
                 await websocket.send(packer.pack(res))
             except websockets.ConnectionClosed:
                 logging.info(f"Connection from {websocket.remote_address} closed")
