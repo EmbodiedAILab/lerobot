@@ -4,6 +4,7 @@ import logging
 import socket
 import tyro
 
+import wandb
 import torch
 
 from lerobot.common.utils.utils import (
@@ -36,6 +37,15 @@ class Checkpoint:
     
     # policy type
     type: str
+    
+@dataclasses.dataclass
+class Wandb:
+    """WanDB config."""
+
+    enable: bool = False
+    
+    # drop the first frame in order to reduce cold-start influence
+    drop_first_n_frames: int = 1
 
 @dataclasses.dataclass
 class Args:
@@ -51,6 +61,8 @@ class Args:
 
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
     policy: Checkpoint = dataclasses.field(default_factory=Checkpoint)
+    
+    wandb : Wandb = dataclasses.field(default_factory=Wandb)
 
 def main(args: Args) -> None:
     torch.backends.cudnn.benchmark = True
@@ -67,6 +79,22 @@ def main(args: Args) -> None:
     elif args.policy.type == PolicyType.PI0.value:
         policy = PI0Policy.from_pretrained(args.policy.path)
     
+    if args.wandb.enable:
+        wandb.init(project="model-inference-monitoring", 
+              config=dataclasses.asdict(policy.config))
+        wandb.config.update({"policy_type": args.policy.type})
+        
+        if torch.cuda.is_available():
+            gpu_info = []
+            for i in range(torch.cuda.device_count()):
+                gpu_info.append(
+                    f"GPU_{i}: {torch.cuda.get_device_name(i)}"
+                )
+            wandb.config.update({"hardware_platform": gpu_info})
+        wandb.define_metric("infer_cost_ms", summary="min,max,mean")
+
+        
+                      
     # Record the policy's behavior.
     # if args.record:
     #     policy = _policy.PolicyRecorder(policy, "policy_records")
@@ -75,7 +103,7 @@ def main(args: Args) -> None:
         policy=policy,
         host="0.0.0.0",
         port=args.port,
-        metadata={},
+        metadata={'wandb_enable': args.wandb.enable, 'drop_first_n_frames': args.wandb.drop_first_n_frames},
     )
     server.serve_forever()
 
