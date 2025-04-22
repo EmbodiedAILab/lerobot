@@ -236,6 +236,7 @@ def train(cfg: TrainPipelineConfig):
     logging.info("Start offline training on a fixed dataset")
     for _ in range(step, cfg.steps):
         start_time = time.perf_counter()
+        sampler.set_epoch(_)
         batch = next(dl_iter)
         train_tracker.dataloading_s = time.perf_counter() - start_time
         

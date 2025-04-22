@@ -97,7 +97,7 @@ class WebsocketPolicyServer:
                 obs = await self.preprocess_observation(obs)
                 for key in obs:
                     if isinstance(obs[key], torch.Tensor):
-                        obs[key] = obs[key].to("cuda", non_blocking=True)
+                        obs[key] = obs[key].to(self._policy.config.device, non_blocking=True)
                 
                 if self._wandb_enable:
                     start_time = time.perf_counter()

@@ -3,14 +3,16 @@ import enum
 import logging
 import socket
 import tyro
+import os
+import json
 
 import wandb
 import torch
+if "ASCEND_HOME_PATH" in os.environ:
+    import torch_npu
+    logging.info("exists npu, import torch_npu")
 
-from lerobot.common.utils.utils import (
-    init_logging,
-    get_safe_torch_device,
-)
+from lerobot.common.utils.utils import init_logging
 from lerobot.common.utils.random_utils import set_seed
 from lerobot.configs import parser
 from lerobot.configs.eval import EvalPipelineConfig
@@ -80,17 +82,26 @@ def main(args: Args) -> None:
         policy = PI0Policy.from_pretrained(args.policy.path)
     
     if args.wandb.enable:
-        wandb.init(project="model-inference-monitoring", 
-              config=dataclasses.asdict(policy.config))
-        wandb.config.update({"policy_type": args.policy.type})
-        
+        tags = [args.policy.type]
+        config = dataclasses.asdict(policy.config)
+        if "train_config.json" in os.listdir(args.policy.path):
+            filepath = os.path.join(args.policy.path, "train_config.json")
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                tags.append(data['dataset']['repo_id'])
+
         if torch.cuda.is_available():
-            gpu_info = []
-            for i in range(torch.cuda.device_count()):
-                gpu_info.append(
-                    f"GPU_{i}: {torch.cuda.get_device_name(i)}"
-                )
-            wandb.config.update({"hardware_platform": gpu_info})
+            config.update({"hardware_platform": torch.cuda.get_device_name(torch.cuda.current_device())})
+            tags.append('cuda')
+        elif torch_npu.npu.is_available():
+            config.update({"hardware_platform": torch_npu.npu.get_device_name(torch_npu.npu.current_device())})
+            tags.append('npu')
+
+        wandb.init(project="model-inference-monitoring", 
+              config=config,
+              tags=tags)
+        
+        
         wandb.define_metric("infer_cost_ms", summary="min,max,mean")
 
         
