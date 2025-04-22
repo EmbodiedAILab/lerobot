@@ -62,6 +62,7 @@ class WebsocketPolicyServer:
             
         return_observations["observation.state"] = torch.from_numpy(observations["state"]).float()
         return_observations["observation.state"] = return_observations["observation.state"].unsqueeze(0)
+        return_observations["task"] = [observations["prompt"]]
         
         return return_observations
             

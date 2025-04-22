@@ -16,6 +16,8 @@ from lerobot.configs.eval import EvalPipelineConfig
 from lerobot.common.serving.websocket_policy_server import WebsocketPolicyServer
 from lerobot.common.policies.act.modeling_act import ACTPolicy
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
+from lerobot.common.policies.pi0.modeling_pi0 import PI0Policy
+
 
 
 class PolicyType(enum.Enum):
@@ -62,6 +64,8 @@ def main(args: Args) -> None:
         policy = ACTPolicy.from_pretrained(args.policy.path)
     elif args.policy.type == PolicyType.DIFFUSION.value:
         policy = DiffusionPolicy.from_pretrained(args.policy.path)
+    elif args.policy.type == PolicyType.PI0.value:
+        policy = PI0Policy.from_pretrained(args.policy.path)
     
     # Record the policy's behavior.
     # if args.record:
