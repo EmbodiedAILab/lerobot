@@ -54,7 +54,7 @@ class WebsocketPolicyServer:
             )
               
         else:
-            self._wandb_enable = False
+            self._trace_enable = False
 
     def serve_forever(self) -> None:
         asyncio.run(self.run())
