@@ -3,10 +3,12 @@ import logging
 import traceback
 import einops
 import time
+from contextlib import nullcontext
 
 import wandb
 import numpy as np
 import torch
+from torch.profiler import profile, record_function, ProfilerActivity
 import websockets.asyncio.server
 import websockets.frames
 
@@ -30,10 +32,27 @@ class WebsocketPolicyServer:
         self._host = host
         self._port = port
         self._metadata = metadata or {}  
+        
+        self._trace_enable = False
+        self._wandb_enable = False
         if self._metadata['wandb_enable']:
             self._wandb_enable = True
             self._drop_first_n_frames = self._metadata['drop_first_n_frames']
             self._infer_cnt = 0
+        if self._metadata['trace_enable']:
+            self._trace_enable = True
+            self._profiler = profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True,
+                with_flops=True,
+                schedule=torch.profiler.schedule(
+                    wait=1,
+                    warmup=1,
+                    active=5
+                ),
+                on_trace_ready=lambda prof: prof.export_chrome_trace(f"tmp/trace_schedule_{prof.step_num}.json"),
+            )
+              
         else:
             self._wandb_enable = False
 
@@ -102,9 +121,11 @@ class WebsocketPolicyServer:
                 if self._wandb_enable:
                     start_time = time.perf_counter()
                 
-                with torch.inference_mode():
+                with torch.inference_mode(), record_function('eval_policy') if self._trace_enable else nullcontext():
+                    if self._trace_enable:
+                        self._profiler.step()
                     action = self._policy.select_action_chunk(obs)
-                
+                                    
                 if self._wandb_enable:
                     if self._infer_cnt < self._drop_first_n_frames:
                         self._infer_cnt = self._infer_cnt + 1

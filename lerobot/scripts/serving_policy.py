@@ -50,6 +50,16 @@ class Wandb:
     drop_first_n_frames: int = 1
 
 @dataclasses.dataclass
+class Trace:
+    """Tracing config."""
+
+    enable: bool = False
+    
+    # drop the first frame in order to reduce cold-start influence
+    drop_first_n_frames: int = 1
+
+
+@dataclasses.dataclass
 class Args:
     """Arguments for the serve_policy script."""
     # If provided, will be used in case the "prompt" key is not present in the data, or if the model doesn't have a default
@@ -65,13 +75,15 @@ class Args:
     policy: Checkpoint = dataclasses.field(default_factory=Checkpoint)
     
     wandb : Wandb = dataclasses.field(default_factory=Wandb)
+    
+    trace : Trace = dataclasses.field(default_factory=Trace)
 
 def main(args: Args) -> None:
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
     set_seed(1000)
     
-    print(args)
+    logging.info(args)
     
     # policy has been in device and evaluated
     if args.policy.type == PolicyType.ACT.value:
@@ -80,6 +92,9 @@ def main(args: Args) -> None:
         policy = DiffusionPolicy.from_pretrained(args.policy.path)
     elif args.policy.type == PolicyType.PI0.value:
         policy = PI0Policy.from_pretrained(args.policy.path)
+        
+    if args.wandb.enable and args.trace.enable:
+        logging.warning("enable pref and profiling at the same time, perf data will be influenced!")
     
     if args.wandb.enable:
         tags = [args.policy.type]
@@ -101,10 +116,9 @@ def main(args: Args) -> None:
               config=config,
               tags=tags)
         
-        
         wandb.define_metric("infer_cost_ms", summary="min,max,mean")
-
         
+    
                       
     # Record the policy's behavior.
     # if args.record:
@@ -114,7 +128,11 @@ def main(args: Args) -> None:
         policy=policy,
         host="0.0.0.0",
         port=args.port,
-        metadata={'wandb_enable': args.wandb.enable, 'drop_first_n_frames': args.wandb.drop_first_n_frames},
+        metadata={
+            'wandb_enable': args.wandb.enable,
+            'drop_first_n_frames': args.wandb.drop_first_n_frames,
+            'trace_enable': args.trace.enable
+        },
     )
     server.serve_forever()
 
