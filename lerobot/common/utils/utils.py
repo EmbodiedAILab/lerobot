@@ -24,9 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-if hasattr(torch, 'npu'):
-    import torch_npu
-    logging.info("exists npu, import torch_npu")
+import torch_npu
 
 
 def none_or_int(value):

@@ -153,7 +153,7 @@ def rollout(
             all_observations.append(deepcopy(observation))
 
         observation = {
-            key: observation[key].to(device, non_blocking=device.type != "cuda") for key in observation
+            key: observation[key].to(device, non_blocking=device.type != "cpu") for key in observation
         }
 
         # Infer "task" from attributes of environments.
