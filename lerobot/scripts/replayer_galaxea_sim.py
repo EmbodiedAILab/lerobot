@@ -94,8 +94,8 @@ def main():
     )
     
     print("data loaded")
-    from_id = dataset.episode_data_index['from'][0].item()
-    to_id = dataset.episode_data_index['to'][0].item()
+    from_id = dataset.episode_data_index['from'][args.episode_index].item()
+    to_id = dataset.episode_data_index['to'][args.episode_index].item()
     print("id acquired", from_id, to_id)
     action_frames = [dataset[idx]['observation.state'] for idx in range(from_id, to_id)]
     print("frames got")
