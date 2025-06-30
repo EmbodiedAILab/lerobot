@@ -28,6 +28,7 @@ from statistics import mean
 
 import numpy as np
 import torch
+import torch_npu
 
 
 def none_or_int(value):
@@ -50,6 +51,8 @@ def auto_select_torch_device() -> torch.device:
     elif torch.backends.mps.is_available():
         logging.info("Metal backend detected, using cuda.")
         return torch.device("mps")
+    elif torch_npu.npu.is_available():
+        return torch.device("npu")
     else:
         logging.warning("No accelerated backend detected. Using default cpu, this will be slow.")
         return torch.device("cpu")
@@ -66,6 +69,8 @@ def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
         case "mps":
             assert torch.backends.mps.is_available()
             device = torch.device("mps")
+        case "npu":
+            device = torch.device("npu")
         case "cpu":
             device = torch.device("cpu")
             if log:
@@ -98,8 +103,10 @@ def is_torch_device_available(try_device: str) -> bool:
         return torch.backends.mps.is_available()
     elif try_device == "cpu":
         return True
+    elif try_device == "npu":
+        return torch_npu.npu.is_available()
     else:
-        raise ValueError(f"Unknown device {try_device}. Supported devices are: cuda, mps or cpu.")
+        raise ValueError(f"Unknown device {try_device}. Supported devices are: cuda, mps, cpu or npu.")
 
 
 def is_amp_available(device: str):

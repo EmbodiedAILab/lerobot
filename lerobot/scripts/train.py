@@ -181,6 +181,7 @@ def train(cfg: TrainPipelineConfig):
         shuffle=shuffle,
         sampler=sampler,
         pin_memory=device.type != "cpu",
+        pin_memory_device=device.type,
         drop_last=False,
     )
     dl_iter = cycle(dataloader)
@@ -193,6 +194,7 @@ def train(cfg: TrainPipelineConfig):
         "lr": AverageMeter("lr", ":0.1e"),
         "update_s": AverageMeter("updt_s", ":.3f"),
         "dataloading_s": AverageMeter("data_s", ":.3f"),
+        "data2device_s": AverageMeter("data2device_s", ":.3f"),
     }
 
     train_tracker = MetricsTracker(
@@ -204,10 +206,13 @@ def train(cfg: TrainPipelineConfig):
         start_time = time.perf_counter()
         batch = next(dl_iter)
         train_tracker.dataloading_s = time.perf_counter() - start_time
+        
 
+        start_time = time.perf_counter()
         for key in batch:
             if isinstance(batch[key], torch.Tensor):
                 batch[key] = batch[key].to(device, non_blocking=True)
+        train_tracker.data2device_s = time.perf_counter() - start_time
 
         train_tracker, output_dict = update_policy(
             train_tracker,

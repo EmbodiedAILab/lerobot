@@ -79,7 +79,7 @@ class WandBLogger:
         )
         wandb.init(
             id=wandb_run_id,
-            project=self.cfg.project,
+            project=self.cfg.project + "_npu",
             entity=self.cfg.entity,
             name=self.job_name,
             notes=self.cfg.notes,
@@ -108,12 +108,12 @@ class WandBLogger:
         if self.cfg.disable_artifact:
             return
 
-        step_id = checkpoint_dir.name
-        artifact_name = f"{self._group}-{step_id}"
-        artifact_name = get_safe_wandb_artifact_name(artifact_name)
-        artifact = self._wandb.Artifact(artifact_name, type="model")
-        artifact.add_file(checkpoint_dir / PRETRAINED_MODEL_DIR / SAFETENSORS_SINGLE_FILE)
-        self._wandb.log_artifact(artifact)
+        # step_id = checkpoint_dir.name
+        # artifact_name = f"{self._group}-{step_id}"
+        # artifact_name = get_safe_wandb_artifact_name(artifact_name)
+        # artifact = self._wandb.Artifact(artifact_name, type="model")
+        # artifact.add_file(checkpoint_dir / PRETRAINED_MODEL_DIR / SAFETENSORS_SINGLE_FILE)
+        # self._wandb.log_artifact(artifact)
 
     def log_dict(
         self, d: dict, step: int | None = None, mode: str = "train", custom_step_key: str | None = None
