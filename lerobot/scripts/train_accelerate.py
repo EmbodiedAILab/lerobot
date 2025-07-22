@@ -114,7 +114,7 @@ def train(cfg: TrainPipelineConfig):
     )
 
     accelerator.init_trackers(
-        project_name=cfg.wandb.project+'npu',
+        project_name=cfg.wandb.project+'_npu',
         init_kwargs={
             "wandb": {
                 "entity": cfg.wandb.entity,
@@ -279,9 +279,8 @@ def train(cfg: TrainPipelineConfig):
         is_eval_step = cfg.eval_freq > 0 and step % cfg.eval_freq == 0
 
         # Logging (only on main process)
-        if is_log_step:
-            logging.info(str(accelerator.device) + " : " + str(train_tracker))
         if is_log_step and accelerator.is_main_process:
+            logging.info(str(accelerator.device) + " : " + str(train_tracker))
             wandb_log_dict = train_tracker.to_dict()
             if output_dict:
                 wandb_log_dict.update(output_dict)
@@ -290,22 +289,26 @@ def train(cfg: TrainPipelineConfig):
             train_tracker.reset_averages()
 
         # Checkpointing (only on main process)
-        if cfg.save_checkpoint and is_saving_step and accelerator.is_main_process:
-            logging.info(f"Checkpoint policy after step {step}")
-            checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
-
-            # Wait for all processes before saving
+        if cfg.save_checkpoint and is_saving_step:
             accelerator.wait_for_everyone()
 
-            # Unwrap model for saving
-            unwrapped_policy = accelerator.unwrap_model(policy)
-            save_checkpoint(checkpoint_dir, step, cfg, unwrapped_policy, optimizer, lr_scheduler)
-            update_last_checkpoint(checkpoint_dir)
+            if accelerator.is_main_process:
+                logging.info(f"Checkpoint policy after step {step}")
+                checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
+
+                # Wait for all processes before saving
+
+                # Unwrap model for saving
+                unwrapped_policy = accelerator.unwrap_model(policy)
+                save_checkpoint(checkpoint_dir, step, cfg, unwrapped_policy, optimizer, lr_scheduler)
+                update_last_checkpoint(checkpoint_dir)
             # if wandb_logger:
             #     wandb_logger.log_policy(checkpoint_dir)
-            
+    logging.info("=== {accelerator.device} reaches barrier before step {step}")
     # Wait for all processes to finish
     accelerator.wait_for_everyone()
+    # if accelerator.is_main_process:
+    #     logging.info("=== one step sync ===")
 
     # Cleanup
     if eval_env and accelerator.is_main_process:
