@@ -31,7 +31,8 @@ class WebsocketPolicyServer:
         self._policy = policy
         self._host = host
         self._port = port
-        self._metadata = metadata or {}  
+        self._metadata = metadata or {}
+        self._stop_event = asyncio.Event()
         
         self._trace_enable = False
         self._wandb_enable = False
@@ -52,7 +53,7 @@ class WebsocketPolicyServer:
                 ),
                 on_trace_ready=lambda prof: prof.export_chrome_trace(f"tmp/trace_schedule_{prof.step_num}.json"),
             )
-              
+
         else:
             self._trace_enable = False
 
@@ -67,8 +68,11 @@ class WebsocketPolicyServer:
             compression=None,
             max_size=None,
         ) as server:
-            await server.serve_forever()
-            
+            # await server.serve_forever()
+            print("WebSocket server started. Waiting for 'exit' command to shutdown.")
+            await self._stop_event.wait()
+            print("Shutdown event received. Server exiting.")
+
     async def preprocess_observation(self, observations: dict) -> dict[str, torch.Tensor]:
         images = observations['images']
         return_observations = {}
@@ -102,43 +106,39 @@ class WebsocketPolicyServer:
 
         while True:
             try:
-                # example
-                # obs = {
-                #     "images": {
-                #         "cam_high": numpy.NDArray,
-                #         "cam_right_wrist": numpy.NDArray,
-                #     },
-                #     "state": numpy.NDarray,
-                #     "prompt": "xxx text"
-                # }
-                obs = msgpack_utils.unpackb(await websocket.recv())
-                
-                obs = await self.preprocess_observation(obs)
-                for key in obs:
-                    if isinstance(obs[key], torch.Tensor):
-                        obs[key] = obs[key].to(self._policy.config.device, non_blocking=True)
-                
-                if self._wandb_enable:
-                    start_time = time.perf_counter()
-                
-                with torch.inference_mode(), record_function('eval_policy') if self._trace_enable else nullcontext():
-                    if self._trace_enable:
-                        self._profiler.step()
-                    action = self._policy.select_action_chunk(obs)
-                                    
-                if self._wandb_enable:
-                    if self._infer_cnt < self._drop_first_n_frames:
-                        self._infer_cnt = self._infer_cnt + 1
-                    else:
-                        infer_cost_ms = (time.perf_counter() - start_time) * 1000
-                        log_dict = {
-                            "infer_cost_ms": infer_cost_ms
-                        }  
-                        wandb.log(log_dict)
-                action = action.squeeze(0)
-                # print("inference once with action:", action.shape, action)
-                res = {"actions": action.cpu().numpy()}
-                await websocket.send(packer.pack(res))
+                obs = msgpack_utils.unpackb(await websocket.recv(), raw=False)
+                if isinstance(obs, dict) and obs.get("command") == "exit":
+                    logging.info(f"Received exit command from {websocket.remote_address}. Shutting down server.")
+                    await websocket.send(packer.pack({"status": "Server is shutting down."}))
+                    self._stop_event.set()
+                else:
+                    # obs = msgpack_utils.unpackb(await websocket.recv())
+                    obs = await self.preprocess_observation(obs)
+                    for key in obs:
+                        if isinstance(obs[key], torch.Tensor):
+                            obs[key] = obs[key].to(self._policy.config.device, non_blocking=True)
+
+                    if self._wandb_enable:
+                        start_time = time.perf_counter()
+
+                    with torch.inference_mode(), record_function('eval_policy') if self._trace_enable else nullcontext():
+                        if self._trace_enable:
+                            self._profiler.step()
+                        action = self._policy.select_action_chunk(obs)
+
+                    if self._wandb_enable:
+                        if self._infer_cnt < self._drop_first_n_frames:
+                            self._infer_cnt = self._infer_cnt + 1
+                        else:
+                            infer_cost_ms = (time.perf_counter() - start_time) * 1000
+                            log_dict = {
+                                "infer_cost_ms": infer_cost_ms
+                            }
+                            wandb.log(log_dict)
+                    action = action.squeeze(0)
+                    # print("inference once with action:", action.shape, action)
+                    res = {"actions": action.cpu().numpy()}
+                    await websocket.send(packer.pack(res))
             except websockets.ConnectionClosed:
                 logging.info(f"Connection from {websocket.remote_address} closed")
                 break
