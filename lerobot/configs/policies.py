@@ -28,6 +28,7 @@ from lerobot.common.optim.schedulers import LRSchedulerConfig
 from lerobot.common.utils.hub import HubMixin
 from lerobot.common.utils.utils import auto_select_torch_device, is_amp_available, is_torch_device_available
 from lerobot.configs.types import FeatureType, NormalizationMode, PolicyFeature
+from lerobot.configs.obs_utils import contains_obs_url, download_policy_file
 
 # Generic variable that is either PreTrainedConfig or a subclass thereof
 T = TypeVar("T", bound="PreTrainedConfig")
@@ -150,6 +151,12 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         if Path(model_id).is_dir():
             if CONFIG_NAME in os.listdir(model_id):
                 config_file = os.path.join(model_id, CONFIG_NAME)
+            else:
+                print(f"{CONFIG_NAME} not found in {Path(model_id).resolve()}")
+        elif contains_obs_url(model_id):
+            dest_dir = download_policy_file(model_id)
+            if CONFIG_NAME in os.listdir(dest_dir):
+                config_file = os.path.join(dest_dir, CONFIG_NAME)
             else:
                 print(f"{CONFIG_NAME} not found in {Path(model_id).resolve()}")
         else:

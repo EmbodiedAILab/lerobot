@@ -28,6 +28,7 @@ from torch import Tensor, nn
 
 from lerobot.common.utils.hub import HubMixin
 from lerobot.configs.policies import PreTrainedConfig
+from lerobot.configs.obs_utils import contains_obs_url, download_policy_file
 
 T = TypeVar("T", bound="PreTrainedPolicy")
 
@@ -110,6 +111,11 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
         if os.path.isdir(model_id):
             print("Loading weights from local directory")
             model_file = os.path.join(model_id, SAFETENSORS_SINGLE_FILE)
+            policy = cls._load_as_safetensor(instance, model_file, config.device, strict)
+        elif contains_obs_url(model_id):
+            dest_dir = download_policy_file(model_id)
+            print("Loading weights from local directory")
+            model_file = os.path.join(dest_dir, SAFETENSORS_SINGLE_FILE)
             policy = cls._load_as_safetensor(instance, model_file, config.device, strict)
         else:
             try:

@@ -8,8 +8,10 @@ import json
 
 import wandb
 import torch
+
 if "ASCEND_HOME_PATH" in os.environ:
     import torch_npu
+
     logging.info("exists npu, import torch_npu")
 
 from lerobot.common.utils.utils import init_logging
@@ -22,7 +24,6 @@ from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 from lerobot.common.policies.pi0.modeling_pi0 import PI0Policy
 
 
-
 class PolicyType(enum.Enum):
     """Supported environments."""
 
@@ -30,31 +31,34 @@ class PolicyType(enum.Enum):
     DIFFUSION = "diffusion"
     PI0 = "pi0"
 
+
 @dataclasses.dataclass
 class Checkpoint:
     """Load a policy from a trained checkpoint."""
 
     # Checkpoint directory (e.g., "outputs/train/act_move_reel_0322_nodepth/checkpoints/040000/pretrained_mode").
     path: str
-    
+
     # policy type
     type: str
-    
+
+
 @dataclasses.dataclass
 class Wandb:
     """WanDB config."""
 
     enable: bool = False
-    
+
     # drop the first frame in order to reduce cold-start influence
     drop_first_n_frames: int = 1
+
 
 @dataclasses.dataclass
 class Trace:
     """Tracing config."""
 
     enable: bool = False
-    
+
     # drop the first frame in order to reduce cold-start influence
     drop_first_n_frames: int = 1
 
@@ -73,18 +77,19 @@ class Args:
 
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
     policy: Checkpoint = dataclasses.field(default_factory=Checkpoint)
-    
-    wandb : Wandb = dataclasses.field(default_factory=Wandb)
-    
-    trace : Trace = dataclasses.field(default_factory=Trace)
+
+    wandb: Wandb = dataclasses.field(default_factory=Wandb)
+
+    trace: Trace = dataclasses.field(default_factory=Trace)
+
 
 def main(args: Args) -> None:
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
     set_seed(1000)
-    
+
     logging.info(args)
-    
+
     # policy has been in device and evaluated
     if args.policy.type == PolicyType.ACT.value:
         policy = ACTPolicy.from_pretrained(args.policy.path)
@@ -92,10 +97,10 @@ def main(args: Args) -> None:
         policy = DiffusionPolicy.from_pretrained(args.policy.path)
     elif args.policy.type == PolicyType.PI0.value:
         policy = PI0Policy.from_pretrained(args.policy.path)
-        
+
     if args.wandb.enable and args.trace.enable:
         logging.warning("enable pref and profiling at the same time, perf data will be influenced!")
-    
+
     if args.wandb.enable:
         tags = [args.policy.type]
         config = dataclasses.asdict(policy.config)
@@ -112,14 +117,12 @@ def main(args: Args) -> None:
             config.update({"hardware_platform": torch_npu.npu.get_device_name(torch_npu.npu.current_device())})
             tags.append('npu')
 
-        wandb.init(project="model-inference-monitoring", 
-              config=config,
-              tags=tags)
-        
+        wandb.init(project="model-inference-monitoring",
+                   config=config,
+                   tags=tags)
+
         wandb.define_metric("infer_cost_ms", summary="min,max,mean")
-        
-    
-                      
+
     # Record the policy's behavior.
     # if args.record:
     #     policy = _policy.PolicyRecorder(policy, "policy_records")
