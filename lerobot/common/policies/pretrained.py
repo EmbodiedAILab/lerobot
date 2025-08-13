@@ -28,6 +28,7 @@ from torch import Tensor, nn
 
 from lerobot.common.utils.hub import HubMixin
 from lerobot.configs.policies import PreTrainedConfig
+from lerobot.configs.obs_utils import contains_obs_url, download_policy_file
 
 T = TypeVar("T", bound="PreTrainedPolicy")
 
@@ -111,6 +112,11 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
             print("Loading weights from local directory")
             model_file = os.path.join(model_id, SAFETENSORS_SINGLE_FILE)
             policy = cls._load_as_safetensor(instance, model_file, config.device, strict)
+        elif contains_obs_url(model_id):
+            dest_dir = download_policy_file(model_id)
+            print("Loading weights from local directory")
+            model_file = os.path.join(dest_dir, SAFETENSORS_SINGLE_FILE)
+            policy = cls._load_as_safetensor(instance, model_file, config.device, strict)
         else:
             try:
                 model_file = hf_hub_download(
@@ -191,6 +197,15 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
 
     @abc.abstractmethod
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
+        """Return one action to run in the environment (potentially in batch mode).
+
+        When the model uses a history of observations, or outputs a sequence of actions, this method deals
+        with caching.
+        """
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def select_action_chunk(self, batch: dict[str, Tensor]) -> Tensor:
         """Return one action to run in the environment (potentially in batch mode).
 
         When the model uses a history of observations, or outputs a sequence of actions, this method deals

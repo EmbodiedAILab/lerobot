@@ -19,6 +19,7 @@ from contextlib import nullcontext
 from pprint import pformat
 from typing import Any
 
+import numpy as np
 import torch
 from termcolor import colored
 from torch.amp import GradScaler
@@ -47,6 +48,7 @@ from lerobot.common.utils.utils import (
     has_method,
     init_logging,
 )
+from lerobot.common.utils.image_utils import resize_with_pad_train
 from lerobot.common.utils.wandb_utils import WandBLogger
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
@@ -126,7 +128,10 @@ def train(cfg: TrainPipelineConfig):
 
     logging.info("Creating dataset")
     dataset = make_dataset(cfg)
-
+    for feature in dataset.meta.info['features']:
+        if "images" in feature:
+            dataset.meta.info['features'][feature]['shape'] = (3, 224, 224)
+   
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
@@ -205,11 +210,17 @@ def train(cfg: TrainPipelineConfig):
         start_time = time.perf_counter()
         batch = next(dl_iter)
         train_tracker.dataloading_s = time.perf_counter() - start_time
-
+        
+        for obs_key in batch:
+            if 'images' in obs_key:
+                if 'is_pad' in obs_key:
+                    continue
+                batch[obs_key] = resize_with_pad_train(batch[obs_key], 224, 224)
+        
         for key in batch:
             if isinstance(batch[key], torch.Tensor):
                 batch[key] = batch[key].to(device, non_blocking=True)
-
+        
         train_tracker, output_dict = update_policy(
             train_tracker,
             policy,

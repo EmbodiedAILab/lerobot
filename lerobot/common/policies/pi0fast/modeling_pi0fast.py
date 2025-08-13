@@ -191,6 +191,10 @@ class PI0FASTPolicy(PreTrainedPolicy):
         for motor_idx in [6, 13]:
             actions[:, :, motor_idx] = aloha_gripper_from_angular_inv(actions[:, :, motor_idx])
         return actions
+    
+    @torch.no_grad
+    def select_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+        raise NotImplementedError("")
 
     @torch.no_grad
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:

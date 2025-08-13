@@ -259,6 +259,39 @@ class PI0Policy(PreTrainedPolicy):
 
     def get_optim_params(self) -> dict:
         return self.parameters()
+    
+    @torch.no_grad
+    def select_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+        self.eval()
+
+        if self.config.adapt_to_pi_aloha:
+            batch[OBS_ROBOT] = self._pi_aloha_decode_state(batch[OBS_ROBOT])
+
+        batch = self.normalize_inputs(batch)
+
+        # Action queue logic for n_action_steps > 1. When the action_queue is depleted, populate it by
+        # querying the policy.
+        images, img_masks = self.prepare_images(batch)
+        state = self.prepare_state(batch)
+        lang_tokens, lang_masks = self.prepare_language(batch)
+
+        actions = self.model.sample_actions(
+            images, img_masks, lang_tokens, lang_masks, state, noise=noise
+        )
+
+        # Unpad actions
+        original_action_dim = self.config.action_feature.shape[0]
+        actions = actions[:, :, :original_action_dim]
+
+        actions = self.unnormalize_outputs({"action": actions})["action"]
+
+        if self.config.adapt_to_pi_aloha:
+            actions = self._pi_aloha_encode_actions(actions)
+
+        # `self.model.forward` returns a (batch_size, n_action_steps, action_dim) tensor, but the queue
+        # effectively has shape (n_action_steps, batch_size, *), hence the transpose.
+        return actions
+
 
     @torch.no_grad
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
