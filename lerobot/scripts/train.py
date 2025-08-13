@@ -19,7 +19,6 @@ from contextlib import nullcontext
 from pprint import pformat
 from typing import Any
 
-import numpy as np
 import torch
 from termcolor import colored
 from torch.amp import GradScaler
@@ -48,7 +47,6 @@ from lerobot.common.utils.utils import (
     has_method,
     init_logging,
 )
-from lerobot.common.utils.image_utils import resize_with_pad_train
 from lerobot.common.utils.wandb_utils import WandBLogger
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
@@ -128,37 +126,7 @@ def train(cfg: TrainPipelineConfig):
 
     logging.info("Creating dataset")
     dataset = make_dataset(cfg)
-    dataset.meta.info['features']['observation.state']['shape'] = (17,)
-    dataset.meta.info['features']['observation.state']['names'] = ['left_arm_1', 'left_arm_2', 'left_arm_3', 'left_arm_4', 'left_arm_5', 'left_arm_6', 
-                                                               'right_arm_1', 'right_arm_2', 'right_arm_3', 'right_arm_4', 'right_arm_5', 'right_arm_6', 'vacuum',
-                                                               'torso_1', 'torso_2', 'torso_3', 'torso_4']
-    dataset.meta.info['features']['action']['shape'] = (17,)
-    dataset.meta.info['features']['action']['names'] = ['left_arm_exp_1', 'left_arm_exp_2', 'left_arm_exp_3', 'left_arm_exp_4', 'left_arm_exp_5', 'left_arm_exp_6', 
-                                                    'right_arm_exp_1', 'right_arm_exp_2', 'right_arm_exp_3', 'right_arm_exp_4', 'right_arm_exp_5', 'right_arm_exp_6', 'vacuum_exp',
-                                                    'torso_exp_1', 'torso_exp_2', 'torso_exp_3', 'torso_exp_4']
-    
-    dataset.meta.info['features']['observation.images.front']['shape'] = (3, 224, 224)
-    dataset.meta.info['features']['observation.images.wrist_right']['shape'] = (3, 224, 224)
-    
-    if 'observation.images.depth' in dataset.meta.info['features']:
-        del dataset.meta.info['features']['observation.images.depth']
-   
-    for stat_idx in dataset.meta.episodes_stats: 
-        for feature in ['observation.state', 'action']:
-            for sub_feature in ['min', 'max', 'mean', 'std']:
-                dataset.meta.episodes_stats[stat_idx][feature][sub_feature] = np.delete(dataset.meta.episodes_stats[stat_idx][feature][sub_feature], [6,13], axis=0)
-   
-   
-    for stat_idx in dataset.meta.episodes_stats:
-        for feature in ['observation.state', 'action']:
-            for sub_feature in ['min', 'max', 'mean', 'std']:
-                # print('dataset.meta outside', stat_idx, feature, sub_feature)
-                assert dataset.meta.episodes_stats[stat_idx][feature][sub_feature].shape[0] == 17
-    
-    for feature in ['observation.state', 'action']:
-        for sub_feature in ['min', 'max', 'mean', 'std']:
-            dataset.meta.stats[feature][sub_feature] = np.delete(dataset.meta.stats[feature][sub_feature], [6,13], axis=0)
-    
+
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
@@ -237,24 +205,11 @@ def train(cfg: TrainPipelineConfig):
         start_time = time.perf_counter()
         batch = next(dl_iter)
         train_tracker.dataloading_s = time.perf_counter() - start_time
-        
-        # remove unused depth info
-        if 'observation.images.depth' in batch:
-            del batch['observation.images.depth']
-            
-        # remove redundant joint states
-        keep_cols = [i for i in range(19) if i not in {6, 13}]
-        # 切片操作删除指定列
-        batch["observation.state"] = batch["observation.state"][..., keep_cols]
-        batch["action"] = batch["action"][..., keep_cols]
-        for obs_key in batch:
-            if 'images' in obs_key:
-                batch[obs_key] = resize_with_pad_train(batch[obs_key], 224, 224)
-        
+
         for key in batch:
             if isinstance(batch[key], torch.Tensor):
                 batch[key] = batch[key].to(device, non_blocking=True)
-        
+
         train_tracker, output_dict = update_policy(
             train_tracker,
             policy,
