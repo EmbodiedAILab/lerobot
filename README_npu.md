@@ -4,7 +4,8 @@
 conda create -n lerobot-npu python=3.10
 conda activate lerobot-npu
 
-# 会有报错，可忽略
+# 会有报错，可忽略，torch版本也可使用2.5.1，请注意同步拉通torchvision和torchaudio版本，参考链接：https://pytorch.org/get-started/previous-versions/
+# torch_npu版本务必与CANN版本对齐，参考链接：https://www.hiascend.com/document/detail/zh/Pytorch/710/releasenote/releasenote_0003.html
 pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 torch_npu==2.3.1.post4
 pip install -r requirements-npu.txt
 ```
